@@ -1,4 +1,4 @@
-import { ref, set, onValue, off, get, update } from 'firebase/database';
+import { ref, set, push, onValue, off, get, update } from 'firebase/database';
 import { signInAnonymously } from 'firebase/auth';
 import { db, auth } from './config.js';
 
@@ -58,4 +58,25 @@ export function subscribeToRoom(roomCode, callback) {
   const roomRef = ref(db, `rooms/${roomCode}`);
   onValue(roomRef, (snap) => callback(snap.val()));
   return () => off(roomRef);
+}
+
+export async function sendMessage(roomCode, playerName, playerIndex, text) {
+  const messagesRef = ref(db, `rooms/${roomCode}/messages`);
+  await push(messagesRef, {
+    name: playerName,
+    playerIndex,
+    text: text.trim(),
+    timestamp: Date.now(),
+  });
+}
+
+export function subscribeToMessages(roomCode, callback) {
+  const messagesRef = ref(db, `rooms/${roomCode}/messages`);
+  onValue(messagesRef, (snap) => {
+    const data = snap.val();
+    if (!data) { callback([]); return; }
+    const msgs = Object.values(data).sort((a, b) => a.timestamp - b.timestamp);
+    callback(msgs);
+  });
+  return () => off(messagesRef);
 }

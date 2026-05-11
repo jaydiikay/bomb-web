@@ -4,6 +4,7 @@ import { reducer } from '../game/gameState.js';
 import GameBoard from './GameBoard.jsx';
 import ScoreScreen from './ScoreScreen.jsx';
 import BombAnimation from './BombAnimation.jsx';
+import Chat from './Chat.jsx';
 
 // Firebase RTDB drops empty arrays; restore them so game logic doesn't crash.
 function normalizeGameState(gs) {
@@ -66,15 +67,27 @@ export default function OnlineGame({ roomCode, uid, playerIndex, players, onExit
     [gameState, playerIndex, roomCode]
   );
 
+  const myName = gameState
+    ? (gameState.players[playerIndex]?.name || players[playerIndex]?.name || 'Player')
+    : (players[playerIndex]?.name || 'Player');
+
+  // Chat is always rendered (position: fixed) so players can message at any phase
+  const chat = (
+    <Chat roomCode={roomCode} playerName={myName} playerIndex={playerIndex} />
+  );
+
   // ── Loading ──
   if (!gameState) {
     return (
-      <div className="pass-screen">
-        <div className="pass-card">
-          <div className="pass-icon">🌐</div>
-          <p style={{ color: '#aaa' }}>Connecting to room {roomCode}...</p>
+      <>
+        <div className="pass-screen">
+          <div className="pass-card">
+            <div className="pass-icon">🌐</div>
+            <p style={{ color: '#aaa' }}>Connecting to room {roomCode}...</p>
+          </div>
         </div>
-      </div>
+        {chat}
+      </>
     );
   }
 
@@ -86,52 +99,54 @@ export default function OnlineGame({ roomCode, uid, playerIndex, players, onExit
   // ── Bomb animation ──
   if (phase === 'bomb' && !showScores) {
     return (
-      <BombAnimation
-        onComplete={() => setShowScores(true)}
-      />
+      <>
+        <BombAnimation onComplete={() => setShowScores(true)} />
+        {chat}
+      </>
     );
   }
 
   // ── Score / game-over screen ──
   if (phase === 'game-over' || (phase === 'bomb' && showScores)) {
     return (
-      <ScoreScreen
-        state={gameState}
-        onPlayAgain={null}
-        onSetup={onExit}
-        addGameResult={null}
-        customActions={
-          <button className="btn btn-secondary" onClick={onExit}>
-            Back to Lobby
-          </button>
-        }
-      />
+      <>
+        <ScoreScreen
+          state={gameState}
+          onPlayAgain={null}
+          onSetup={onExit}
+          addGameResult={null}
+          customActions={
+            <button className="btn btn-secondary" onClick={onExit}>
+              Back to Lobby
+            </button>
+          }
+        />
+        {chat}
+      </>
     );
   }
 
   // ── Main game board ──
-  // We pass a wrapped dispatch; if it's not the current player's turn the
-  // dispatch silently no-ops. The waiting overlay informs the user.
   return (
-    <div style={{ position: 'relative' }}>
-      <GameBoard
-        state={gameState}
-        dispatch={dispatch}
-        viewerIndex={playerIndex}
-        onGameOver={() => {
-          // bomb phase triggers score via BombAnimation.onComplete above
-          // normal game-over is reflected through phase change from Firebase
-        }}
-      />
+    <>
+      <div style={{ position: 'relative' }}>
+        <GameBoard
+          state={gameState}
+          dispatch={dispatch}
+          viewerIndex={playerIndex}
+          onGameOver={() => {}}
+        />
 
-      {/* Waiting overlay — shown when it's not my turn (including drew-card phase) */}
-      {!isMyTurn && (phase === 'playing' || phase === 'drew-card' || phase === 'awaiting-second') && (
-        <div className="waiting-overlay">
-          <div className="waiting-card">
-            Waiting for {currentPlayerName}...
+        {/* Waiting overlay — shown when it's not my turn (including drew-card phase) */}
+        {!isMyTurn && (phase === 'playing' || phase === 'drew-card' || phase === 'awaiting-second') && (
+          <div className="waiting-overlay">
+            <div className="waiting-card">
+              Waiting for {currentPlayerName}...
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+      {chat}
+    </>
   );
 }
