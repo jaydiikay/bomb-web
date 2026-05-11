@@ -366,12 +366,30 @@ body {
 .other-player-next .other-player-name { color: #aed581; }
 .other-player-next { outline: 1px solid rgba(174,213,129,0.4); border-radius: 6px; padding: 2px 4px; }
 .next-arrow { color: #aed581; font-size: 0.7rem; }
+.other-player-active .other-player-name { color: var(--gold); }
+.other-player-active { outline: 2px solid rgba(245,197,24,0.5); border-radius: 6px; padding: 2px 4px; background: rgba(245,197,24,0.07); }
+.playing-arrow { color: var(--gold); font-size: 0.7rem; }
+.playing-badge { font-size: 0.65rem; background: var(--gold); color: #1a1a1a; border-radius: 4px; padding: 1px 5px; margin-left: 5px; font-weight: 700; vertical-align: middle; }
 .other-player-cards {
   display: flex;
   align-items: center;
 }
 .other-player-count { font-size: 0.75rem; color: #aaa; }
 .card-overflow { font-size: 0.75rem; color: #aaa; margin-left: 4px; }
+
+/* Viewer name label above hand */
+.viewer-name-label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.75rem;
+  background: rgba(0,0,0,0.3);
+  border-radius: 8px 8px 0 0;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.viewer-name-text { font-size: 1rem; font-weight: 700; color: #f0f0f0; }
+.viewer-name-turn { font-size: 0.78rem; background: var(--gold); color: #1a1a1a; border-radius: 4px; padding: 2px 7px; font-weight: 700; }
+.viewer-name-wait { font-size: 0.78rem; color: #888; }
 
 /* Center piles */
 .center-area {

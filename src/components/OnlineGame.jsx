@@ -117,6 +117,7 @@ export default function OnlineGame({ roomCode, uid, playerIndex, players, onExit
       <GameBoard
         state={gameState}
         dispatch={dispatch}
+        viewerIndex={playerIndex}
         onGameOver={() => {
           // bomb phase triggers score via BombAnimation.onComplete above
           // normal game-over is reflected through phase change from Firebase

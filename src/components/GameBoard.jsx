@@ -30,7 +30,9 @@ function computeNextPlayerIndex(state) {
   return ((currentPlayerIndex + dir) % n + n) % n;
 }
 
-export default function GameBoard({ state, dispatch, onGameOver }) {
+// viewerIndex: which player is sitting at this device. Defaults to currentPlayerIndex
+// (local play). In online mode, pass the logged-in player's index.
+export default function GameBoard({ state, dispatch, onGameOver, viewerIndex }) {
   const {
     players,
     drawPile,
@@ -45,39 +47,44 @@ export default function GameBoard({ state, dispatch, onGameOver }) {
     message,
   } = state;
 
+  const effectiveViewer = viewerIndex !== undefined ? viewerIndex : currentPlayerIndex;
+  const isMyTurn = effectiveViewer === currentPlayerIndex;
   const currentPlayer = players[currentPlayerIndex];
+  const viewerPlayer = players[effectiveViewer];
+
   const nextPlayerIndex = computeNextPlayerIndex(state);
   const nextPlayer = players[nextPlayerIndex];
   // Don't show "Next up" when the same player goes again (e.g. 4-card with 2 players)
   const nextPlayerName = nextPlayerIndex !== currentPlayerIndex ? nextPlayer.name : null;
 
-  // Players other than current (for display around board)
+  // Show all players except the viewer around the board
   const otherPlayers = players
     .map((p, i) => ({ ...p, index: i }))
-    .filter((p) => p.index !== currentPlayerIndex);
+    .filter((p) => p.index !== effectiveViewer);
 
-  const hasPlayableCard = currentPlayer.hand.some((c) =>
+  const hasPlayableCard = viewerPlayer.hand.some((c) =>
     canPlayCard(c, topCard, pendingDraw)
   );
 
   function handlePlayCard(cardId) {
-    dispatch({ type: 'PLAY_CARD', cardId });
+    if (isMyTurn) dispatch({ type: 'PLAY_CARD', cardId });
   }
 
   function handleSelectSecond(cardId) {
-    dispatch({ type: 'PLAY_PAIR', secondCardId: cardId });
+    if (isMyTurn) dispatch({ type: 'PLAY_PAIR', secondCardId: cardId });
   }
 
   function handleDraw() {
-    dispatch({ type: 'DRAW_CARD' });
+    if (isMyTurn) dispatch({ type: 'DRAW_CARD' });
   }
 
   function handleCancelSecond() {
-    dispatch({ type: 'CANCEL_SECOND' });
+    if (isMyTurn) dispatch({ type: 'CANCEL_SECOND' });
   }
 
   // Draw pile is always clickable. During awaiting-second it acts as "draw instead".
   function handleDrawPileClick() {
+    if (!isMyTurn) return;
     if (phase === 'awaiting-second') {
       dispatch({ type: 'CANCEL_SECOND' });
     } else if (phase === 'playing') {
@@ -163,27 +170,36 @@ export default function GameBoard({ state, dispatch, onGameOver }) {
 
       {/* Other players */}
       <div className="other-players">
-        {otherPlayers.map((p) => (
-          <div key={p.id} className={`other-player${p.index === nextPlayerIndex ? ' other-player-next' : ''}`}>
-            <div className="other-player-name">
-              {p.index === nextPlayerIndex && <span className="next-arrow">▶ </span>}
-              {p.name}
+        {otherPlayers.map((p) => {
+          const isActive = p.index === currentPlayerIndex;
+          const isNext = p.index === nextPlayerIndex && !isActive;
+          return (
+            <div
+              key={p.id}
+              className={`other-player${isActive ? ' other-player-active' : isNext ? ' other-player-next' : ''}`}
+            >
+              <div className="other-player-name">
+                {isActive && <span className="playing-arrow">▶ </span>}
+                {!isActive && isNext && <span className="next-arrow">▶ </span>}
+                {p.name}
+                {isActive && <span className="playing-badge">Playing</span>}
+              </div>
+              <div className="other-player-cards">
+                {Array.from({ length: Math.min(p.hand.length, 7) }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="face-down-stack"
+                    style={{ marginLeft: i === 0 ? 0 : -18 }}
+                  />
+                ))}
+                {p.hand.length > 7 && (
+                  <span className="card-overflow">+{p.hand.length - 7}</span>
+                )}
+              </div>
+              <div className="other-player-count">{p.hand.length} cards</div>
             </div>
-            <div className="other-player-cards">
-              {Array.from({ length: Math.min(p.hand.length, 7) }).map((_, i) => (
-                <div
-                  key={i}
-                  className="face-down-stack"
-                  style={{ marginLeft: i === 0 ? 0 : -18 }}
-                />
-              ))}
-              {p.hand.length > 7 && (
-                <span className="card-overflow">+{p.hand.length - 7}</span>
-              )}
-            </div>
-            <div className="other-player-count">{p.hand.length} cards</div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Center: piles */}
@@ -249,19 +265,26 @@ export default function GameBoard({ state, dispatch, onGameOver }) {
         </div>
       )}
 
-      {/* Current player hand */}
+      {/* Viewer's hand — always shows this device's player */}
       <div className="bottom-area">
+        <div className="viewer-name-label">
+          <span className="viewer-name-text">{viewerPlayer.name}</span>
+          {isMyTurn
+            ? <span className="viewer-name-turn">Your turn</span>
+            : <span className="viewer-name-wait">Waiting...</span>
+          }
+        </div>
         <PlayerHand
-          hand={currentPlayer.hand}
+          hand={viewerPlayer.hand}
           onPlayCard={handlePlayCard}
           topCard={topCard}
           pendingDraw={pendingDraw}
-          phase={phase}
+          phase={isMyTurn ? phase : 'playing'}
           selectedCard={selectedCard}
           onSelectSecond={handleSelectSecond}
         />
 
-        {phase === 'playing' && (
+        {isMyTurn && phase === 'playing' && (
           <button className="btn btn-secondary draw-btn" onClick={handleDraw}>
             {pendingDraw > 0
               ? `Draw ${pendingDraw} cards (forced)`
