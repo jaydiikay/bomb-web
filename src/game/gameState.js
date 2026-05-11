@@ -233,11 +233,11 @@ export function reducer(state, action) {
       if (card.rank === '4') {
         const n = players.length;
         if (n === 2) {
-          // Current player goes again — don't advance
+          // With 2 players, reversal sends play back to the same person
           newState = { ...newState, pendingDraw: 0 };
           return { ...newState, phase: 'pass-and-play', message: null };
         } else {
-          // Next turn is reversed (clockwise), then back to anti-clockwise
+          // Reverse direction for the next one turn
           newState = { ...newState, reverseOnce: true, pendingDraw: 0 };
           return advanceTurn(newState);
         }
@@ -311,6 +311,22 @@ export function reducer(state, action) {
           selectedCard: secondCard,
           isChained: true,
         };
+      }
+
+      // Apply special effects if the second card itself is a special card
+      if (secondCard.rank === '4') {
+        const n = players.length;
+        if (n === 2) {
+          return { ...newState, phase: 'pass-and-play', message: null };
+        } else {
+          newState = { ...newState, reverseOnce: true };
+          return advanceTurn(newState);
+        }
+      }
+
+      if (secondCard.rank === '2') {
+        newState = { ...newState, pendingDraw: (state.pendingDraw || 0) + 2 };
+        return advanceTurn(newState);
       }
 
       return advanceTurn(newState);
