@@ -5,6 +5,10 @@ import TurnIndicator from './TurnIndicator.jsx';
 import BombAnimation from './BombAnimation.jsx';
 import { canPlayCard } from '../game/rules.js';
 
+function suitSymbol(suit) {
+  return { hearts: '♥', diamonds: '♦', clubs: '♣', spades: '♠' }[suit] || suit;
+}
+
 function computeNextPlayerIndex(state) {
   const { players, currentPlayerIndex, direction, reverseOnce } = state;
   const n = players.length;
@@ -23,6 +27,7 @@ export default function GameBoard({ state, dispatch, onGameOver }) {
     phase,
     selectedCard,
     isChained,
+    drawnCards,
     message,
   } = state;
 
@@ -61,7 +66,7 @@ export default function GameBoard({ state, dispatch, onGameOver }) {
   function handleDrawPileClick() {
     if (phase === 'awaiting-second') {
       dispatch({ type: 'CANCEL_SECOND' });
-    } else {
+    } else if (phase === 'playing') {
       dispatch({ type: 'DRAW_CARD' });
     }
   }
@@ -78,6 +83,32 @@ export default function GameBoard({ state, dispatch, onGameOver }) {
           onGameOver && onGameOver();
         }}
       />
+    );
+  }
+
+  // Drew-card screen: show what the player drew before passing the device
+  if (phase === 'drew-card') {
+    return (
+      <div className="pass-screen">
+        <div className="pass-card">
+          <div className="pass-icon">🃏</div>
+          <h2>{currentPlayer.name} drew:</h2>
+          <div className="drew-cards-row">
+            {drawnCards.length > 0 ? (
+              drawnCards.map((c) => <Card key={c.id} card={c} />)
+            ) : (
+              <p style={{ color: '#aaa' }}>No cards left in the draw pile.</p>
+            )}
+          </div>
+          <button
+            className="btn btn-primary btn-large"
+            style={{ marginTop: '1.5rem' }}
+            onClick={() => dispatch({ type: 'END_DRAWN_TURN' })}
+          >
+            End Turn
+          </button>
+        </div>
+      </div>
     );
   }
 

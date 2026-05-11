@@ -40,9 +40,10 @@ export function createInitialState(players) {
     direction: 1,       // 1 = anti-clockwise (index+1), -1 = clockwise (index-1)
     reverseOnce: false, // 4-card: reverse direction for one turn
     pendingDraw: 0,     // accumulated draw count from stacked 2s
-    phase: 'pass-and-play', // 'pass-and-play' | 'playing' | 'awaiting-second' | 'bomb' | 'game-over'
+    phase: 'pass-and-play', // 'pass-and-play' | 'playing' | 'awaiting-second' | 'drew-card' | 'bomb' | 'game-over'
     selectedCard: null,  // for 8/J second-card selection
     isChained: false,    // true when awaiting-second came from a chained 8/J (PLAY_PAIR)
+    drawnCards: [],      // cards drawn this turn, shown before passing to next player
     winner: null,
     loser: null,
     endReason: null,    // 'normal' | 'bomb' | 'bomb-last'
@@ -219,8 +220,13 @@ export function reducer(state, action) {
 
       // Handle special cards
       if (card.rank === '2') {
-        // Stack the draw
-        newState = { ...newState, pendingDraw: pendingDraw + 2 };
+        if (pendingDraw > 0) {
+          // Blocking a 2 — neutralize the penalty entirely, next player plays normally
+          newState = { ...newState, pendingDraw: 0 };
+        } else {
+          // Fresh 2 — next player must draw 2
+          newState = { ...newState, pendingDraw: 2 };
+        }
         return advanceTurn(newState);
       }
 
@@ -311,23 +317,44 @@ export function reducer(state, action) {
     }
 
     case 'DRAW_CARD': {
-      const { currentPlayerIndex, pendingDraw } = state;
+      const { currentPlayerIndex, pendingDraw, players } = state;
       const drawCount = pendingDraw > 0 ? pendingDraw : 1;
 
+      const handBefore = new Set(players[currentPlayerIndex].hand.map((c) => c.id));
       let newState = drawCards(state, currentPlayerIndex, drawCount);
-      newState = { ...newState, pendingDraw: 0, selectedCard: null, isChained: false };
-      return advanceTurn(newState);
+      const drawnCards = newState.players[currentPlayerIndex].hand.filter(
+        (c) => !handBefore.has(c.id)
+      );
+
+      // Pause so the player can see what they drew before the turn passes
+      return {
+        ...newState,
+        pendingDraw: 0,
+        selectedCard: null,
+        isChained: false,
+        drawnCards,
+        phase: 'drew-card',
+      };
+    }
+
+    case 'END_DRAWN_TURN': {
+      return advanceTurn({ ...state, drawnCards: [] });
     }
 
     case 'CANCEL_SECOND': {
       // The 8/J (or chained 8/J) was already played and is the current top card.
       // Player has no valid second card (or chose not to play one).
-      // Draw 1 card from the pile and end the turn.
-      const { currentPlayerIndex, selectedCard } = state;
+      // Draw 1 card and pause so they can see it before the turn passes.
+      const { currentPlayerIndex, selectedCard, players } = state;
       if (!selectedCard) return state;
 
+      const handBefore = new Set(players[currentPlayerIndex].hand.map((c) => c.id));
       let s = drawCards(state, currentPlayerIndex, 1);
-      return advanceTurn({ ...s, selectedCard: null, isChained: false });
+      const drawnCards = s.players[currentPlayerIndex].hand.filter(
+        (c) => !handBefore.has(c.id)
+      );
+
+      return { ...s, selectedCard: null, isChained: false, drawnCards, phase: 'drew-card' };
     }
 
     case 'NEXT_TURN': {
