@@ -107,8 +107,10 @@ export default function GameBoard({ state, dispatch, onGameOver, viewerIndex }) 
     );
   }
 
-  // Drew-card screen: show what the player drew before passing the device
-  if (phase === 'drew-card') {
+  // Drew-card screen: show what the player drew before passing the device.
+  // Only shown to the player who actually drew (isMyTurn). Other viewers in
+  // online mode fall through to the normal board, hidden by the waiting overlay.
+  if (phase === 'drew-card' && isMyTurn) {
     return (
       <div className="pass-screen">
         <div className="pass-card">
