@@ -182,7 +182,6 @@ export default function GameBoard({ state, dispatch, onGameOver, viewerIndex }) 
                 {isActive && <span className="playing-arrow">▶ </span>}
                 {!isActive && isNext && <span className="next-arrow">▶ </span>}
                 {p.name}
-                {isActive && <span className="playing-badge">Playing</span>}
               </div>
               <div className="other-player-cards">
                 {Array.from({ length: Math.min(p.hand.length, 7) }).map((_, i) => (
