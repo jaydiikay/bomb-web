@@ -281,8 +281,10 @@ export function reducer(state, action) {
       }
 
       if (requiresSecondCard(card)) {
-        // 8/J is always played. Then the player must pick a second card (same suit
-        // or rank). If they have none they click "Draw 1 Card Instead".
+        // If 8/J was the last card, win immediately — no second card needed.
+        if (newHand.length === 0) {
+          return handleNormalWin(newState, currentPlayerIndex);
+        }
         return {
           ...newState,
           phase: 'awaiting-second',
@@ -337,6 +339,10 @@ export function reducer(state, action) {
       if (requiresSecondCard(secondCard)) {
         const validSeconds = getValidSecondCards(secondCard, newHand);
         if (validSeconds.length === 0) {
+          // Hand empty after chaining — player wins
+          if (newHand.length === 0) {
+            return handleNormalWin(newState, currentPlayerIndex);
+          }
           // No valid card to chain — draw 1 from the pile and end turn
           let s = drawCards(newState, currentPlayerIndex, 1);
           return advanceTurn(s);
@@ -400,6 +406,11 @@ export function reducer(state, action) {
       // Draw 1 card and pause so they can see it before the turn passes.
       const { currentPlayerIndex, selectedCard, players } = state;
       if (!selectedCard) return state;
+
+      // If the hand is already empty (8/J was the last card), win immediately.
+      if (players[currentPlayerIndex].hand.length === 0) {
+        return handleNormalWin({ ...state, selectedCard: null, isChained: false }, currentPlayerIndex);
+      }
 
       const handBefore = new Set(players[currentPlayerIndex].hand.map((c) => c.id));
       let s = drawCards(state, currentPlayerIndex, 1);
