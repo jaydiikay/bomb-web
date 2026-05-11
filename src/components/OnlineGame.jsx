@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { subscribeToRoom, pushGameState } from '../firebase/rooms.js';
-import { reducer } from '../game/gameState.js';
+import { reducer, createInitialState } from '../game/gameState.js';
 import GameBoard from './GameBoard.jsx';
 import ScoreScreen from './ScoreScreen.jsx';
 import BombAnimation from './BombAnimation.jsx';
@@ -46,6 +46,23 @@ export default function OnlineGame({ roomCode, uid, playerIndex, players, onExit
     });
     return unsub;
   }, [roomCode]);
+
+  // Reset showScores when a new game begins so the bomb animation works again
+  useEffect(() => {
+    if (gameState?.phase === 'playing') setShowScores(false);
+  }, [gameState?.phase]);
+
+  async function handlePlayAgain() {
+    if (!gameState) return;
+    const gamePlayers = gameState.players.map((p, i) => ({ id: i, name: p.name }));
+    const fresh = createInitialState(gamePlayers);
+    const onlineState = { ...fresh, phase: 'playing', isOnline: true };
+    try {
+      await pushGameState(roomCode, onlineState);
+    } catch (err) {
+      console.error('Failed to restart game:', err);
+    }
+  }
 
   // dispatch: only acts when it is this client's turn
   const dispatch = useCallback(
@@ -113,12 +130,17 @@ export default function OnlineGame({ roomCode, uid, playerIndex, players, onExit
         <ScoreScreen
           state={gameState}
           onPlayAgain={null}
-          onSetup={onExit}
+          onSetup={null}
           addGameResult={null}
           customActions={
-            <button className="btn btn-secondary" onClick={onExit}>
-              Back to Lobby
-            </button>
+            <>
+              <button className="btn btn-primary" onClick={handlePlayAgain}>
+                Play Again (same players)
+              </button>
+              <button className="btn btn-secondary" onClick={onExit}>
+                Back to Lobby
+              </button>
+            </>
           }
         />
         {chat}
