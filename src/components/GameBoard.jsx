@@ -5,6 +5,13 @@ import TurnIndicator from './TurnIndicator.jsx';
 import BombAnimation from './BombAnimation.jsx';
 import { canPlayCard } from '../game/rules.js';
 
+function computeNextPlayerIndex(state) {
+  const { players, currentPlayerIndex, direction, reverseOnce } = state;
+  const n = players.length;
+  const dir = reverseOnce ? -direction : direction;
+  return ((currentPlayerIndex + dir) % n + n) % n;
+}
+
 export default function GameBoard({ state, dispatch, onGameOver }) {
   const {
     players,
@@ -15,10 +22,15 @@ export default function GameBoard({ state, dispatch, onGameOver }) {
     pendingDraw,
     phase,
     selectedCard,
+    isChained,
     message,
   } = state;
 
   const currentPlayer = players[currentPlayerIndex];
+  const nextPlayerIndex = computeNextPlayerIndex(state);
+  const nextPlayer = players[nextPlayerIndex];
+  // Don't show "Next up" when the same player goes again (e.g. 4-card with 2 players)
+  const nextPlayerName = nextPlayerIndex !== currentPlayerIndex ? nextPlayer.name : null;
 
   // Players other than current (for display around board)
   const otherPlayers = players
@@ -68,7 +80,13 @@ export default function GameBoard({ state, dispatch, onGameOver }) {
           <div className="pass-icon">🃏</div>
           <h2>Pass the device to</h2>
           <h1 className="pass-name">{currentPlayer.name}</h1>
-          <p className="pass-sub">Tap when ready to view your hand</p>
+          {pendingDraw > 0 ? (
+            <p className="pass-penalty">
+              ⚠ You must draw {pendingDraw} card{pendingDraw > 1 ? 's' : ''} — a 2 was played against you!
+            </p>
+          ) : (
+            <p className="pass-sub">Tap when ready to view your hand</p>
+          )}
           <button className="btn btn-primary btn-large" onClick={handleReveal}>
             Show My Cards
           </button>
@@ -85,13 +103,18 @@ export default function GameBoard({ state, dispatch, onGameOver }) {
         direction={direction}
         pendingDraw={pendingDraw}
         phase={phase}
+        nextPlayerName={nextPlayerName}
+        isChained={isChained}
       />
 
       {/* Other players */}
       <div className="other-players">
         {otherPlayers.map((p) => (
-          <div key={p.id} className="other-player">
-            <div className="other-player-name">{p.name}</div>
+          <div key={p.id} className={`other-player${p.index === nextPlayerIndex ? ' other-player-next' : ''}`}>
+            <div className="other-player-name">
+              {p.index === nextPlayerIndex && <span className="next-arrow">▶ </span>}
+              {p.name}
+            </div>
             <div className="other-player-cards">
               {Array.from({ length: Math.min(p.hand.length, 7) }).map((_, i) => (
                 <div
@@ -142,7 +165,7 @@ export default function GameBoard({ state, dispatch, onGameOver }) {
       {phase === 'awaiting-second' && (
         <div className="cancel-bar">
           <button className="btn btn-secondary" onClick={handleCancelSecond}>
-            Cancel — Draw Instead
+            {isChained ? 'Draw 1 Card Instead' : 'Cancel — Draw Instead'}
           </button>
         </div>
       )}

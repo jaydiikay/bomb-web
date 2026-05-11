@@ -265,11 +265,15 @@ body {
 .setup-select {
   padding: 0.55rem 1rem;
   border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.2);
-  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.3);
+  background: #1a2e20;
   color: #fff;
   font-size: 1rem;
   cursor: pointer;
+}
+.setup-select option {
+  background: #1a2e20;
+  color: #fff;
 }
 
 .setup-names { display: flex; flex-direction: column; gap: 0.5rem; }
@@ -323,6 +327,12 @@ body {
   font-weight: 700;
   animation: pulse 0.7s infinite alternate;
 }
+.turn-next-player {
+  margin-left: auto;
+  font-size: 0.85rem;
+  color: #aed581;
+  font-weight: 600;
+}
 
 @keyframes pulse {
   from { opacity: 0.8; }
@@ -348,11 +358,14 @@ body {
   font-size: 0.8rem;
   font-weight: 600;
   color: #ccc;
-  max-width: 80px;
+  max-width: 90px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.other-player-next .other-player-name { color: #aed581; }
+.other-player-next { outline: 1px solid rgba(174,213,129,0.4); border-radius: 6px; padding: 2px 4px; }
+.next-arrow { color: #aed581; font-size: 0.7rem; }
 .other-player-cards {
   display: flex;
   align-items: center;
@@ -442,6 +455,16 @@ body {
 .pass-card h2 { font-size: 1.2rem; color: #aaa; margin-bottom: 0.5rem; }
 .pass-name { font-size: 2.5rem; font-weight: 800; color: var(--gold); margin-bottom: 1rem; }
 .pass-sub { color: #888; font-size: 0.9rem; margin-bottom: 1.5rem; }
+.pass-penalty {
+  background: rgba(183,28,28,0.3);
+  border: 1px solid #b71c1c;
+  border-radius: 8px;
+  color: #ff8a80;
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 0.5rem 0.9rem;
+  margin-bottom: 1.5rem;
+}
 
 /* === Score Screen === */
 .score-screen {

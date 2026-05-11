@@ -42,6 +42,7 @@ export function createInitialState(players) {
     pendingDraw: 0,     // accumulated draw count from stacked 2s
     phase: 'pass-and-play', // 'pass-and-play' | 'playing' | 'awaiting-second' | 'bomb' | 'game-over'
     selectedCard: null,  // for 8/J second-card selection
+    isChained: false,    // true when awaiting-second came from a chained 8/J (PLAY_PAIR)
     winner: null,
     loser: null,
     endReason: null,    // 'normal' | 'bomb' | 'bomb-last'
@@ -266,7 +267,7 @@ export function reducer(state, action) {
     }
 
     case 'PLAY_PAIR': {
-      // Play 8/J + second card
+      // Play 8/J + second card (or a chained second card for another 8/J)
       const { secondCardId } = action;
       const { currentPlayerIndex, players, selectedCard } = state;
       const player = players[currentPlayerIndex];
@@ -279,12 +280,15 @@ export function reducer(state, action) {
         i === currentPlayerIndex ? { ...p, hand: newHand } : p
       );
 
+      // state.topCard is the 8/J already played (= selectedCard).
+      // It goes to discard; the second card becomes the new top.
       let newState = {
         ...state,
         players: newPlayers,
-        discardPile: [...state.discardPile, state.topCard, selectedCard],
+        discardPile: [...state.discardPile, state.topCard],
         topCard: secondCard,
         selectedCard: null,
+        isChained: false,
         pendingDraw: 0,
       };
 
@@ -296,6 +300,23 @@ export function reducer(state, action) {
       // Check win
       if (newHand.length === 0) {
         return handleNormalWin(newState, currentPlayerIndex);
+      }
+
+      // If the second card is also 8/J it requires its own paired card (chaining)
+      if (requiresSecondCard(secondCard)) {
+        const validSeconds = getValidSecondCards(secondCard, newHand);
+        if (validSeconds.length === 0) {
+          // No valid card to chain — draw 1 from the pile and end turn
+          let s = drawCards(newState, currentPlayerIndex, 1);
+          return advanceTurn(s);
+        }
+        // Enter awaiting-second again for the chained 8/J
+        return {
+          ...newState,
+          phase: 'awaiting-second',
+          selectedCard: secondCard,
+          isChained: true,
+        };
       }
 
       return advanceTurn(newState);
@@ -311,15 +332,21 @@ export function reducer(state, action) {
     }
 
     case 'CANCEL_SECOND': {
-      // Cancel awaiting-second and put the first card back in hand
-      const { currentPlayerIndex, players, selectedCard } = state;
+      const { currentPlayerIndex, players, selectedCard, isChained } = state;
       if (!selectedCard) return state;
+
+      if (isChained) {
+        // The chained 8/J was already played — draw 1 card and end turn
+        let s = drawCards(state, currentPlayerIndex, 1);
+        return advanceTurn({ ...s, selectedCard: null, isChained: false });
+      }
+
+      // Initial 8/J cancel: put the card back in hand and restore previous top
       const newPlayers = players.map((p, i) =>
         i === currentPlayerIndex
           ? { ...p, hand: [...p.hand, selectedCard] }
           : p
       );
-      // Also restore top card from discard
       const newDiscard = [...state.discardPile];
       const restoredTop = newDiscard.pop();
       return {
@@ -328,6 +355,7 @@ export function reducer(state, action) {
         topCard: restoredTop || state.topCard,
         discardPile: newDiscard,
         selectedCard: null,
+        isChained: false,
         phase: 'playing',
         message: null,
       };
