@@ -1,6 +1,7 @@
-import React, { useReducer, useState } from 'react';
+import React, { useReducer, useState, useEffect, useRef } from 'react';
 import { useAuth } from './auth/useAuth.js';
 import { createInitialState, reducer } from './game/gameState.js';
+import { getBotAction } from './game/bot.js';
 import AuthScreen from './components/AuthScreen.jsx';
 import SetupScreen from './components/SetupScreen.jsx';
 import GameBoard from './components/GameBoard.jsx';
@@ -193,19 +194,28 @@ function HomeScreen({ currentUser, onLocal, onOnline, onLogout }) {
 // ── Inner component that owns the reducer and can be re-mounted cleanly via key ──
 function GameStateManager({ initialState, onGameOver, onStateChange }) {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const prevPhaseRef = React.useRef(state.phase);
+  const prevPhaseRef = useRef(state.phase);
 
-  React.useEffect(() => {
+  useEffect(() => {
     onStateChange(state);
     const prev = prevPhaseRef.current;
     prevPhaseRef.current = state.phase;
 
-    // Normal win: transition directly to scores
     if (prev !== 'game-over' && state.phase === 'game-over') {
       onGameOver();
     }
-    // Bomb phase: GameBoard shows animation, calls onGameOver when done
   }, [state, onGameOver, onStateChange]);
+
+  // Bot auto-play: if the current player is a bot, dispatch their action after a short delay
+  useEffect(() => {
+    const cp = state.players[state.currentPlayerIndex];
+    if (!cp?.isBot) return;
+    if (state.phase === 'game-over' || state.phase === 'bomb') return;
+    const action = getBotAction(state, state.currentPlayerIndex);
+    if (!action) return;
+    const timer = setTimeout(() => dispatch(action), 700);
+    return () => clearTimeout(timer);
+  }, [state]);
 
   return (
     <GameBoard

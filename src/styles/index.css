@@ -819,6 +819,79 @@ body {
   color: #aaa;
 }
 
+/* === Bot toggle in SetupScreen === */
+.setup-player-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.setup-player-row .setup-input { flex: 1; }
+.setup-input-bot { opacity: 0.6; font-style: italic; }
+.bot-toggle {
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.18);
+  color: #aaa;
+  border-radius: 8px;
+  padding: 0.4rem 0.55rem;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.bot-toggle:hover { background: rgba(255,255,255,0.14); }
+.bot-toggle-on {
+  background: rgba(100,200,120,0.18);
+  border-color: #4caf50;
+  color: #81c784;
+}
+
+/* === Mid-game exit button === */
+.mid-game-exit-btn {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 300;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #ccc;
+  border-radius: 8px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.mid-game-exit-btn:hover { background: rgba(180,30,30,0.6); color: #fff; border-color: rgba(255,80,80,0.4); }
+
+/* === Confirmation dialog === */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 400;
+}
+.confirm-dialog {
+  background: #0f2a1a;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 16px;
+  padding: 2rem 2rem 1.5rem;
+  max-width: 360px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+}
+.confirm-dialog h2 { font-size: 1.25rem; margin-bottom: 0.75rem; }
+.confirm-dialog p { color: #aaa; font-size: 0.9rem; line-height: 1.5; margin-bottom: 1.5rem; }
+.confirm-actions { display: flex; gap: 0.75rem; justify-content: center; }
+.btn-danger {
+  background: #c62828;
+  color: #fff;
+}
+.btn-danger:hover { background: #e53935; }
+
 /* === Chat === */
 .chat-toggle-btn {
   position: fixed;

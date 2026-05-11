@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { subscribeToRoom, pushGameState, removePlayerFromRoom, restartGame } from '../firebase/rooms.js';
 import { reducer, createInitialState } from '../game/gameState.js';
+import { shuffle } from '../game/deck.js';
 import GameBoard from './GameBoard.jsx';
 import ScoreScreen from './ScoreScreen.jsx';
 import BombAnimation from './BombAnimation.jsx';
@@ -35,6 +36,7 @@ function normalizeGameState(gs) {
 export default function OnlineGame({ roomCode, uid, playerIndex, players, onExit }) {
   const [gameState, setGameState] = useState(null);
   const [showScores, setShowScores] = useState(false);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
   // Live room players from Firebase (updated when someone joins/leaves)
   const [roomPlayers, setRoomPlayers] = useState(players);
   // Effective index re-derived from UID so it stays correct after a Play Again reindex
@@ -79,6 +81,54 @@ export default function OnlineGame({ roomCode, uid, playerIndex, players, onExit
       await removePlayerFromRoom(roomCode, uid);
     } catch (err) {
       console.error('Failed to remove from room:', err);
+    }
+    onExit();
+  }
+
+  async function handleMidGameExit() {
+    setShowExitConfirm(false);
+    if (!gameState) { onExit(); return; }
+
+    const myIdx = effectivePlayerIndex;
+    const myCards = gameState.players[myIdx]?.hand || [];
+
+    // Return the exiting player's cards to the draw pile (shuffled in)
+    const newDrawPile = shuffle([...gameState.drawPile, ...myCards]);
+
+    // Remove the player and reindex the rest
+    const remainingPlayers = gameState.players
+      .filter((_, i) => i !== myIdx)
+      .map((p, i) => ({ ...p, id: i }));
+
+    // Adjust currentPlayerIndex for the removed slot
+    let newCurrentIdx = gameState.currentPlayerIndex;
+    if (newCurrentIdx === myIdx) {
+      newCurrentIdx = myIdx % remainingPlayers.length;
+    } else if (newCurrentIdx > myIdx) {
+      newCurrentIdx -= 1;
+    }
+
+    const updatedGame = {
+      ...gameState,
+      players: remainingPlayers,
+      drawPile: newDrawPile,
+      currentPlayerIndex: newCurrentIdx,
+      selectedCard: null,
+      isChained: false,
+      drawnCards: [],
+      phase: remainingPlayers.length >= 2 ? 'playing' : 'game-over',
+      winner: remainingPlayers.length < 2 ? remainingPlayers[0] ?? null : gameState.winner,
+      endReason: remainingPlayers.length < 2 ? 'normal' : gameState.endReason,
+    };
+
+    const updatedRoomPlayers = roomPlayers
+      .filter((p) => p.uid !== uid)
+      .map((p, i) => ({ ...p, index: i }));
+
+    try {
+      await restartGame(roomCode, updatedRoomPlayers, updatedGame);
+    } catch (err) {
+      console.error('Mid-game exit failed:', err);
     }
     onExit();
   }
@@ -187,6 +237,36 @@ export default function OnlineGame({ roomCode, uid, playerIndex, players, onExit
           </div>
         )}
       </div>
+
+      {/* Exit button — top-left corner */}
+      <button
+        className="mid-game-exit-btn"
+        onClick={() => setShowExitConfirm(true)}
+        title="Exit game"
+      >
+        ✕ Exit
+      </button>
+
+      {/* Exit confirmation dialog */}
+      {showExitConfirm && (
+        <div className="confirm-overlay">
+          <div className="confirm-dialog">
+            <h2>Leave the game?</h2>
+            <p>
+              Your cards will be shuffled back into the draw pile so the remaining players can continue.
+            </p>
+            <div className="confirm-actions">
+              <button className="btn btn-danger" onClick={handleMidGameExit}>
+                Yes, Leave
+              </button>
+              <button className="btn btn-secondary" onClick={() => setShowExitConfirm(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {chat}
     </>
   );
