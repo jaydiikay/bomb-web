@@ -108,9 +108,8 @@ export default function GameBoard({ state, dispatch, onGameOver, viewerIndex }) 
   }
 
   // Drew-card screen: show what the player drew before passing the device.
-  // Only shown to the player who actually drew (isMyTurn). Other viewers in
-  // online mode fall through to the normal board, hidden by the waiting overlay.
-  if (phase === 'drew-card' && isMyTurn) {
+  // Skip entirely for bots (they auto-advance) and for non-active online viewers.
+  if (phase === 'drew-card' && isMyTurn && !viewerPlayer.isBot) {
     return (
       <div className="pass-screen">
         <div className="pass-card">
@@ -135,8 +134,9 @@ export default function GameBoard({ state, dispatch, onGameOver, viewerIndex }) 
     );
   }
 
-  // Pass-and-play screen: show "Pass to Player X" before revealing hand
-  if (phase === 'pass-and-play') {
+  // Pass-and-play screen: show "Pass to Player X" before revealing hand.
+  // Skip for bots — they reveal instantly, humans should never see the bot's screen.
+  if (phase === 'pass-and-play' && !viewerPlayer.isBot) {
     return (
       <div className="pass-screen">
         <div className="pass-card">
@@ -266,31 +266,39 @@ export default function GameBoard({ state, dispatch, onGameOver, viewerIndex }) 
         </div>
       )}
 
-      {/* Viewer's hand — always shows this device's player */}
+      {/* Viewer's hand — always shows this device's player, hidden for bots */}
       <div className="bottom-area">
-        <div className="viewer-name-label">
-          <span className="viewer-name-text">{viewerPlayer.name}</span>
-          {isMyTurn
-            ? <span className="viewer-name-turn">Your turn</span>
-            : <span className="viewer-name-wait">Waiting...</span>
-          }
-        </div>
-        <PlayerHand
-          hand={viewerPlayer.hand}
-          onPlayCard={handlePlayCard}
-          topCard={topCard}
-          pendingDraw={pendingDraw}
-          phase={isMyTurn ? phase : 'playing'}
-          selectedCard={selectedCard}
-          onSelectSecond={handleSelectSecond}
-        />
-
-        {isMyTurn && phase === 'playing' && (
-          <button className="btn btn-secondary draw-btn" onClick={handleDraw}>
-            {pendingDraw > 0
-              ? `Draw ${pendingDraw} cards (forced)`
-              : 'Draw a card'}
-          </button>
+        {viewerPlayer.isBot ? (
+          <div className="bot-thinking">
+            <span className="viewer-name-text">{viewerPlayer.name}</span>
+            <span className="bot-thinking-label">thinking…</span>
+          </div>
+        ) : (
+          <>
+            <div className="viewer-name-label">
+              <span className="viewer-name-text">{viewerPlayer.name}</span>
+              {isMyTurn
+                ? <span className="viewer-name-turn">Your turn</span>
+                : <span className="viewer-name-wait">Waiting...</span>
+              }
+            </div>
+            <PlayerHand
+              hand={viewerPlayer.hand}
+              onPlayCard={handlePlayCard}
+              topCard={topCard}
+              pendingDraw={pendingDraw}
+              phase={isMyTurn ? phase : 'playing'}
+              selectedCard={selectedCard}
+              onSelectSecond={handleSelectSecond}
+            />
+            {isMyTurn && phase === 'playing' && (
+              <button className="btn btn-secondary draw-btn" onClick={handleDraw}>
+                {pendingDraw > 0
+                  ? `Draw ${pendingDraw} cards (forced)`
+                  : 'Draw a card'}
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

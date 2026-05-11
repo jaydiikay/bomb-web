@@ -42,16 +42,7 @@ export default function App() {
     setScreen('lobby');
   }
 
-  function handleChooseBot() {
-    const humanName = auth.currentUser?.username || 'Player 1';
-    const botPlayers = [
-      { id: 0, name: humanName, isBot: false },
-      { id: 1, name: 'Bot', isBot: true },
-    ];
-    handleStart(botPlayers);
-  }
-
-  // ── Local game ──
+// ── Local game ──
   function handleStart(chosenPlayers) {
     setPlayers(chosenPlayers);
     const initial = createInitialState(chosenPlayers);
@@ -104,7 +95,6 @@ export default function App() {
           currentUser={auth.currentUser}
           onLocal={handleChooseLocal}
           onOnline={handleChooseOnline}
-          onBot={handleChooseBot}
           onLogout={() => { auth.logout(); setScreen('auth'); }}
         />
       )}
@@ -158,7 +148,7 @@ export default function App() {
 }
 
 // ── Home screen component ──
-function HomeScreen({ currentUser, onLocal, onOnline, onBot, onLogout }) {
+function HomeScreen({ currentUser, onLocal, onOnline, onLogout }) {
   return (
     <div className="setup-screen">
       <div className="setup-card" style={{ textAlign: 'center', maxWidth: 420 }}>
@@ -180,28 +170,19 @@ function HomeScreen({ currentUser, onLocal, onOnline, onBot, onLogout }) {
             style={{ width: '100%' }}
             onClick={onLocal}
           >
-            🧑‍🤝‍🧑 Local Game
-          </button>
-          <button
-            className="btn btn-bot btn-large"
-            style={{ width: '100%' }}
-            onClick={onBot}
-          >
-            🤖 Play vs Bot
+            Local Game
           </button>
           <button
             className="btn btn-secondary btn-large"
             style={{ width: '100%' }}
             onClick={onOnline}
           >
-            🌐 Online Game
+            Online Game
           </button>
         </div>
 
         <p style={{ marginTop: '1.5rem', color: '#888', fontSize: '0.85rem' }}>
-          Local — pass the device between players.
-          <br />
-          Bot — play solo against the computer.
+          Local — pass the device between players. Add bots in setup.
           <br />
           Online — play over the internet with friends.
         </p>
@@ -225,14 +206,19 @@ function GameStateManager({ initialState, onGameOver, onStateChange }) {
     }
   }, [state, onGameOver, onStateChange]);
 
-  // Bot auto-play: if the current player is a bot, dispatch their action after a short delay
+  // Bot auto-play: if the current player is a bot, dispatch their action automatically.
+  // Transitional phases (pass-and-play, drew-card) advance immediately so humans
+  // never see the bot's private screen. Playing/awaiting-second get a short delay
+  // so the bot feels like it's "thinking".
   useEffect(() => {
     const cp = state.players[state.currentPlayerIndex];
     if (!cp?.isBot) return;
     if (state.phase === 'game-over' || state.phase === 'bomb') return;
     const action = getBotAction(state, state.currentPlayerIndex);
     if (!action) return;
-    const timer = setTimeout(() => dispatch(action), 700);
+    const isTransitional = state.phase === 'pass-and-play' || state.phase === 'drew-card';
+    const delay = isTransitional ? 0 : 800;
+    const timer = setTimeout(() => dispatch(action), delay);
     return () => clearTimeout(timer);
   }, [state]);
 
