@@ -1,0 +1,98 @@
+import { ref, set, push, onValue, off, get, update } from 'firebase/database';
+import { signInAnonymously } from 'firebase/auth';
+import { db, auth } from './config.js';
+
+export async function signInAsGuest() {
+  const result = await signInAnonymously(auth);
+  return result.user;
+}
+
+export function generateRoomCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
+export async function createRoom(hostName) {
+  const user = await signInAsGuest();
+  const roomCode = generateRoomCode();
+  const roomRef = ref(db, `rooms/${roomCode}`);
+  await set(roomRef, {
+    host: { uid: user.uid, name: hostName },
+    players: [{ uid: user.uid, name: hostName, index: 0 }],
+    status: 'waiting', // 'waiting' | 'playing' | 'finished'
+    gameState: null,
+    createdAt: Date.now(),
+  });
+  return { roomCode, uid: user.uid };
+}
+
+export async function joinRoom(roomCode, playerName) {
+  const user = await signInAsGuest();
+  const roomRef = ref(db, `rooms/${roomCode}`);
+  const snap = await get(roomRef);
+  if (!snap.exists()) throw new Error('Room not found');
+  const room = snap.val();
+  if (room.status !== 'waiting') throw new Error('Game already started');
+  if (room.players.length >= 7) throw new Error('Room is full');
+  const newPlayer = { uid: user.uid, name: playerName, index: room.players.length };
+  await update(roomRef, {
+    players: [...room.players, newPlayer],
+  });
+  return { roomCode, uid: user.uid, playerIndex: newPlayer.index };
+}
+
+export async function startGame(roomCode, initialGameState) {
+  const roomRef = ref(db, `rooms/${roomCode}`);
+  await update(roomRef, {
+    status: 'playing',
+    gameState: initialGameState,
+  });
+}
+
+export async function pushGameState(roomCode, gameState) {
+  const roomRef = ref(db, `rooms/${roomCode}/gameState`);
+  await set(roomRef, gameState);
+}
+
+// Remove a player from the room's players list (called on exit)
+export async function removePlayerFromRoom(roomCode, uid) {
+  const roomRef = ref(db, `rooms/${roomCode}`);
+  const snap = await get(roomRef);
+  if (!snap.exists()) return;
+  const room = snap.val();
+  const remaining = (room.players || []).filter((p) => p.uid !== uid);
+  await update(roomRef, { players: remaining });
+}
+
+// Restart: atomically write new players list + fresh game state
+export async function restartGame(roomCode, roomPlayers, gameState) {
+  const roomRef = ref(db, `rooms/${roomCode}`);
+  await update(roomRef, { players: roomPlayers, gameState });
+}
+
+export function subscribeToRoom(roomCode, callback) {
+  const roomRef = ref(db, `rooms/${roomCode}`);
+  onValue(roomRef, (snap) => callback(snap.val()));
+  return () => off(roomRef);
+}
+
+export async function sendMessage(roomCode, playerName, playerIndex, text) {
+  const messagesRef = ref(db, `rooms/${roomCode}/messages`);
+  await push(messagesRef, {
+    name: playerName,
+    playerIndex,
+    text: text.trim(),
+    timestamp: Date.now(),
+  });
+}
+
+export function subscribeToMessages(roomCode, callback) {
+  const messagesRef = ref(db, `rooms/${roomCode}/messages`);
+  onValue(messagesRef, (snap) => {
+    const data = snap.val();
+    if (!data) { callback([]); return; }
+    const msgs = Object.values(data).sort((a, b) => a.timestamp - b.timestamp);
+    callback(msgs);
+  });
+  return () => off(messagesRef);
+}

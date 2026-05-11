@@ -29,6 +29,7 @@ export function createInitialState(players) {
     id: p.id || i,
     name: p.name,
     hand: hands[i],
+    isBot: p.isBot || false,
   }));
 
   return {
@@ -40,8 +41,10 @@ export function createInitialState(players) {
     direction: 1,       // 1 = anti-clockwise (index+1), -1 = clockwise (index-1)
     reverseOnce: false, // 4-card: reverse direction for one turn
     pendingDraw: 0,     // accumulated draw count from stacked 2s
-    phase: 'pass-and-play', // 'pass-and-play' | 'playing' | 'awaiting-second' | 'bomb' | 'game-over'
+    phase: 'pass-and-play', // 'pass-and-play' | 'playing' | 'awaiting-second' | 'drew-card' | 'bomb' | 'game-over'
     selectedCard: null,  // for 8/J second-card selection
+    isChained: false,    // true when awaiting-second came from a chained 8/J (PLAY_PAIR)
+    drawnCards: [],      // cards drawn this turn, shown before passing to next player
     winner: null,
     loser: null,
     endReason: null,    // 'normal' | 'bomb' | 'bomb-last'
@@ -100,7 +103,7 @@ function advanceTurn(state) {
     ...state,
     currentPlayerIndex: next,
     reverseOnce: false,
-    phase: 'pass-and-play',
+    phase: state.isOnline ? 'playing' : 'pass-and-play',
     message: null,
   };
 }
@@ -161,21 +164,57 @@ function handleBombEnd(state, triggeringPlayerIndex) {
 }
 
 function handleNormalWin(state, winningPlayerIndex) {
-  const scores = computeScores(state);
+  let scores = computeScores(state);
   const winner = state.players[winningPlayerIndex];
-  const others = scores.filter((s) => s.playerId !== winner.id);
-  const maxScore = Math.max(...others.map((s) => s.score));
-  const loserEntry = others.find((s) => s.score === maxScore);
-  const loser = state.players.find((p) => p.id === loserEntry?.playerId);
+  let currentState = { ...state };
+  const tiebreakerRounds = [];
 
-  return {
-    ...state,
-    phase: 'game-over',
-    scores,
-    winner,
-    loser,
-    endReason: 'normal',
-  };
+  let others = scores.filter((s) => s.playerId !== winner.id);
+
+  // Resolve tiebreaker loop
+  while (true) {
+    const maxScore = Math.max(...others.map((s) => s.score));
+    const tied = others.filter((s) => s.score === maxScore);
+    if (tied.length === 1) {
+      // Unique highest scorer — they lose
+      const loser = state.players.find((p) => p.id === tied[0].playerId);
+      return {
+        ...currentState,
+        phase: 'game-over',
+        scores,
+        winner,
+        loser,
+        endReason: 'normal',
+        tiebreakerRounds,
+      };
+    }
+    // Tied — each tied player draws a card
+    for (const tiedEntry of tied) {
+      currentState = ensureDrawPile(currentState);
+      if (currentState.drawPile.length === 0) break; // No cards left, break tie arbitrarily
+      const [drawnCard, ...rest] = currentState.drawPile;
+      currentState = { ...currentState, drawPile: rest };
+      const addedPoints = drawnCard.rank === '7' && drawnCard.suit === 'hearts' ? 500 : (() => {
+        // reuse scoring logic inline
+        const pts = { A: 1, '2': 20, '3': 3, '4': 20, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, J: 45, Q: 2, K: 4 };
+        return pts[drawnCard.rank] ?? 0;
+      })();
+      // Update this player's score
+      const scoreEntry = others.find((s) => s.playerId === tiedEntry.playerId);
+      scoreEntry.score += addedPoints;
+      // Also update the main scores array
+      const mainEntry = scores.find((s) => s.playerId === tiedEntry.playerId);
+      if (mainEntry) mainEntry.score += addedPoints;
+      tiebreakerRounds.push({ playerName: scoreEntry.name, card: drawnCard, addedPoints });
+    }
+    if (currentState.drawPile.length === 0) {
+      // Can't draw more — pick the tied player with highest score (first alphabetically as fallback)
+      const maxScore2 = Math.max(...others.map((s) => s.score));
+      const loserEntry = others.find((s) => s.score === maxScore2);
+      const loser = state.players.find((p) => p.id === loserEntry.playerId);
+      return { ...currentState, phase: 'game-over', scores, winner, loser, endReason: 'normal', tiebreakerRounds };
+    }
+  }
 }
 
 export function reducer(state, action) {
@@ -218,44 +257,39 @@ export function reducer(state, action) {
 
       // Handle special cards
       if (card.rank === '2') {
-        // Stack the draw
-        newState = { ...newState, pendingDraw: pendingDraw + 2 };
+        if (pendingDraw > 0) {
+          // Blocking a 2 — neutralize the penalty entirely, next player plays normally
+          newState = { ...newState, pendingDraw: 0 };
+        } else {
+          // Fresh 2 — next player must draw 2
+          newState = { ...newState, pendingDraw: 2 };
+        }
         return advanceTurn(newState);
       }
 
       if (card.rank === '4') {
         const n = players.length;
         if (n === 2) {
-          // Current player goes again — don't advance
+          // With 2 players, reversal sends play back to the same person
           newState = { ...newState, pendingDraw: 0 };
           return { ...newState, phase: 'pass-and-play', message: null };
         } else {
-          // Next turn is reversed (clockwise), then back to anti-clockwise
+          // Reverse direction for the next one turn
           newState = { ...newState, reverseOnce: true, pendingDraw: 0 };
           return advanceTurn(newState);
         }
       }
 
       if (requiresSecondCard(card)) {
-        // Check if player has valid second cards
-        const validSeconds = getValidSecondCards(card, newHand);
-        if (validSeconds.length === 0) {
-          // No valid second card — must draw instead (undo the play)
-          // Actually per rules: cannot play the 8/J if no valid second card
-          // Revert: put card back
-          const revertPlayers = players.map((p, i) =>
-            i === currentPlayerIndex ? { ...p } : p
-          );
-          return {
-            ...state,
-            message: `No valid second card for ${card.rank}! You must draw instead.`,
-            phase: 'playing',
-          };
+        // If 8/J was the last card, win immediately — no second card needed.
+        if (newHand.length === 0) {
+          return handleNormalWin(newState, currentPlayerIndex);
         }
         return {
           ...newState,
           phase: 'awaiting-second',
           selectedCard: card,
+          isChained: false,
           pendingDraw: 0,
         };
       }
@@ -266,7 +300,7 @@ export function reducer(state, action) {
     }
 
     case 'PLAY_PAIR': {
-      // Play 8/J + second card
+      // Play 8/J + second card (or a chained second card for another 8/J)
       const { secondCardId } = action;
       const { currentPlayerIndex, players, selectedCard } = state;
       const player = players[currentPlayerIndex];
@@ -279,12 +313,15 @@ export function reducer(state, action) {
         i === currentPlayerIndex ? { ...p, hand: newHand } : p
       );
 
+      // state.topCard is the 8/J already played (= selectedCard).
+      // It goes to discard; the second card becomes the new top.
       let newState = {
         ...state,
         players: newPlayers,
-        discardPile: [...state.discardPile, state.topCard, selectedCard],
+        discardPile: [...state.discardPile, state.topCard],
         topCard: secondCard,
         selectedCard: null,
+        isChained: false,
         pendingDraw: 0,
       };
 
@@ -298,39 +335,84 @@ export function reducer(state, action) {
         return handleNormalWin(newState, currentPlayerIndex);
       }
 
+      // If the second card is also 8/J, chain — player must play another card.
+      // Always enter awaiting-second (mirrors the initial 8/J play): if they
+      // have no valid follow-up they click "Draw 1 Card Instead" themselves.
+      if (requiresSecondCard(secondCard)) {
+        if (newHand.length === 0) {
+          return handleNormalWin(newState, currentPlayerIndex);
+        }
+        return {
+          ...newState,
+          phase: 'awaiting-second',
+          selectedCard: secondCard,
+          isChained: true,
+        };
+      }
+
+      // Apply special effects if the second card itself is a special card
+      if (secondCard.rank === '4') {
+        const n = players.length;
+        if (n === 2) {
+          return { ...newState, phase: 'pass-and-play', message: null };
+        } else {
+          newState = { ...newState, reverseOnce: true };
+          return advanceTurn(newState);
+        }
+      }
+
+      if (secondCard.rank === '2') {
+        newState = { ...newState, pendingDraw: (state.pendingDraw || 0) + 2 };
+        return advanceTurn(newState);
+      }
+
       return advanceTurn(newState);
     }
 
     case 'DRAW_CARD': {
-      const { currentPlayerIndex, pendingDraw } = state;
+      const { currentPlayerIndex, pendingDraw, players } = state;
       const drawCount = pendingDraw > 0 ? pendingDraw : 1;
 
+      const handBefore = new Set(players[currentPlayerIndex].hand.map((c) => c.id));
       let newState = drawCards(state, currentPlayerIndex, drawCount);
-      newState = { ...newState, pendingDraw: 0 };
-      return advanceTurn(newState);
+      const drawnCards = newState.players[currentPlayerIndex].hand.filter(
+        (c) => !handBefore.has(c.id)
+      );
+
+      // Pause so the player can see what they drew before the turn passes
+      return {
+        ...newState,
+        pendingDraw: 0,
+        selectedCard: null,
+        isChained: false,
+        drawnCards,
+        phase: 'drew-card',
+      };
+    }
+
+    case 'END_DRAWN_TURN': {
+      return advanceTurn({ ...state, drawnCards: [] });
     }
 
     case 'CANCEL_SECOND': {
-      // Cancel awaiting-second and put the first card back in hand
-      const { currentPlayerIndex, players, selectedCard } = state;
+      // The 8/J (or chained 8/J) was already played and is the current top card.
+      // Player has no valid second card (or chose not to play one).
+      // Draw 1 card and pause so they can see it before the turn passes.
+      const { currentPlayerIndex, selectedCard, players } = state;
       if (!selectedCard) return state;
-      const newPlayers = players.map((p, i) =>
-        i === currentPlayerIndex
-          ? { ...p, hand: [...p.hand, selectedCard] }
-          : p
+
+      // If the hand is already empty (8/J was the last card), win immediately.
+      if (players[currentPlayerIndex].hand.length === 0) {
+        return handleNormalWin({ ...state, selectedCard: null, isChained: false }, currentPlayerIndex);
+      }
+
+      const handBefore = new Set(players[currentPlayerIndex].hand.map((c) => c.id));
+      let s = drawCards(state, currentPlayerIndex, 1);
+      const drawnCards = s.players[currentPlayerIndex].hand.filter(
+        (c) => !handBefore.has(c.id)
       );
-      // Also restore top card from discard
-      const newDiscard = [...state.discardPile];
-      const restoredTop = newDiscard.pop();
-      return {
-        ...state,
-        players: newPlayers,
-        topCard: restoredTop || state.topCard,
-        discardPile: newDiscard,
-        selectedCard: null,
-        phase: 'playing',
-        message: null,
-      };
+
+      return { ...s, selectedCard: null, isChained: false, drawnCards, phase: 'drew-card' };
     }
 
     case 'NEXT_TURN': {
