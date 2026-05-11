@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { subscribeToRoom, pushGameState } from '../firebase/rooms.js';
+import { subscribeToRoom, pushGameState, removePlayerFromRoom, restartGame } from '../firebase/rooms.js';
 import { reducer, createInitialState } from '../game/gameState.js';
 import GameBoard from './GameBoard.jsx';
 import ScoreScreen from './ScoreScreen.jsx';
@@ -34,18 +34,27 @@ function normalizeGameState(gs) {
  */
 export default function OnlineGame({ roomCode, uid, playerIndex, players, onExit }) {
   const [gameState, setGameState] = useState(null);
-  // Track whether we've already called the bomb-complete transition
   const [showScores, setShowScores] = useState(false);
+  // Live room players from Firebase (updated when someone joins/leaves)
+  const [roomPlayers, setRoomPlayers] = useState(players);
+  // Effective index re-derived from UID so it stays correct after a Play Again reindex
+  const [effectivePlayerIndex, setEffectivePlayerIndex] = useState(playerIndex);
 
-  // Subscribe to the room — keep local state in sync with Firebase
+  // Subscribe to the room — keep game state and player list in sync
   useEffect(() => {
     const unsub = subscribeToRoom(roomCode, (roomData) => {
       if (roomData?.gameState) {
         setGameState(normalizeGameState(roomData.gameState));
       }
+      if (roomData?.players) {
+        setRoomPlayers(roomData.players);
+        // Re-derive our index in case players were reindexed on Play Again
+        const mine = roomData.players.find((p) => p.uid === uid);
+        if (mine != null) setEffectivePlayerIndex(mine.index);
+      }
     });
     return unsub;
-  }, [roomCode]);
+  }, [roomCode, uid]);
 
   // Reset showScores when a new game begins so the bomb animation works again
   useEffect(() => {
@@ -53,22 +62,32 @@ export default function OnlineGame({ roomCode, uid, playerIndex, players, onExit
   }, [gameState?.phase]);
 
   async function handlePlayAgain() {
-    if (!gameState) return;
-    const gamePlayers = gameState.players.map((p, i) => ({ id: i, name: p.name }));
+    // Use live roomPlayers (departed players already removed) and reindex sequentially
+    const updatedRoomPlayers = roomPlayers.map((p, i) => ({ ...p, index: i }));
+    const gamePlayers = updatedRoomPlayers.map((p, i) => ({ id: i, name: p.name }));
     const fresh = createInitialState(gamePlayers);
     const onlineState = { ...fresh, phase: 'playing', isOnline: true };
     try {
-      await pushGameState(roomCode, onlineState);
+      await restartGame(roomCode, updatedRoomPlayers, onlineState);
     } catch (err) {
       console.error('Failed to restart game:', err);
     }
+  }
+
+  async function handleExit() {
+    try {
+      await removePlayerFromRoom(roomCode, uid);
+    } catch (err) {
+      console.error('Failed to remove from room:', err);
+    }
+    onExit();
   }
 
   // dispatch: only acts when it is this client's turn
   const dispatch = useCallback(
     async (action) => {
       if (!gameState) return;
-      if (gameState.currentPlayerIndex !== playerIndex) return;
+      if (gameState.currentPlayerIndex !== effectivePlayerIndex) return;
 
       const newState = reducer(gameState, action);
       // Optimistically update local state for instant UI feedback
@@ -81,16 +100,16 @@ export default function OnlineGame({ roomCode, uid, playerIndex, players, onExit
         console.error('Failed to push game state:', err);
       }
     },
-    [gameState, playerIndex, roomCode]
+    [gameState, effectivePlayerIndex, roomCode]
   );
 
   const myName = gameState
-    ? (gameState.players[playerIndex]?.name || players[playerIndex]?.name || 'Player')
-    : (players[playerIndex]?.name || 'Player');
+    ? (gameState.players[effectivePlayerIndex]?.name || roomPlayers[effectivePlayerIndex]?.name || 'Player')
+    : (roomPlayers[effectivePlayerIndex]?.name || 'Player');
 
   // Chat is always rendered (position: fixed) so players can message at any phase
   const chat = (
-    <Chat roomCode={roomCode} playerName={myName} playerIndex={playerIndex} />
+    <Chat roomCode={roomCode} playerName={myName} playerIndex={effectivePlayerIndex} />
   );
 
   // ── Loading ──
@@ -109,7 +128,7 @@ export default function OnlineGame({ roomCode, uid, playerIndex, players, onExit
   }
 
   const { phase, currentPlayerIndex } = gameState;
-  const isMyTurn = currentPlayerIndex === playerIndex;
+  const isMyTurn = currentPlayerIndex === effectivePlayerIndex;
   const currentPlayerName =
     gameState.players[currentPlayerIndex]?.name || `Player ${currentPlayerIndex + 1}`;
 
@@ -137,7 +156,7 @@ export default function OnlineGame({ roomCode, uid, playerIndex, players, onExit
               <button className="btn btn-primary" onClick={handlePlayAgain}>
                 Play Again (same players)
               </button>
-              <button className="btn btn-secondary" onClick={onExit}>
+              <button className="btn btn-secondary" onClick={handleExit}>
                 Back to Lobby
               </button>
             </>
@@ -155,7 +174,7 @@ export default function OnlineGame({ roomCode, uid, playerIndex, players, onExit
         <GameBoard
           state={gameState}
           dispatch={dispatch}
-          viewerIndex={playerIndex}
+          viewerIndex={effectivePlayerIndex}
           onGameOver={() => {}}
         />
 

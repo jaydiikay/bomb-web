@@ -54,6 +54,22 @@ export async function pushGameState(roomCode, gameState) {
   await set(roomRef, gameState);
 }
 
+// Remove a player from the room's players list (called on exit)
+export async function removePlayerFromRoom(roomCode, uid) {
+  const roomRef = ref(db, `rooms/${roomCode}`);
+  const snap = await get(roomRef);
+  if (!snap.exists()) return;
+  const room = snap.val();
+  const remaining = (room.players || []).filter((p) => p.uid !== uid);
+  await update(roomRef, { players: remaining });
+}
+
+// Restart: atomically write new players list + fresh game state
+export async function restartGame(roomCode, roomPlayers, gameState) {
+  const roomRef = ref(db, `rooms/${roomCode}`);
+  await update(roomRef, { players: roomPlayers, gameState });
+}
+
 export function subscribeToRoom(roomCode, callback) {
   const roomRef = ref(db, `rooms/${roomCode}`);
   onValue(roomRef, (snap) => callback(snap.val()));
