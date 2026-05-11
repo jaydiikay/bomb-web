@@ -163,21 +163,57 @@ function handleBombEnd(state, triggeringPlayerIndex) {
 }
 
 function handleNormalWin(state, winningPlayerIndex) {
-  const scores = computeScores(state);
+  let scores = computeScores(state);
   const winner = state.players[winningPlayerIndex];
-  const others = scores.filter((s) => s.playerId !== winner.id);
-  const maxScore = Math.max(...others.map((s) => s.score));
-  const loserEntry = others.find((s) => s.score === maxScore);
-  const loser = state.players.find((p) => p.id === loserEntry?.playerId);
+  let currentState = { ...state };
+  const tiebreakerRounds = [];
 
-  return {
-    ...state,
-    phase: 'game-over',
-    scores,
-    winner,
-    loser,
-    endReason: 'normal',
-  };
+  let others = scores.filter((s) => s.playerId !== winner.id);
+
+  // Resolve tiebreaker loop
+  while (true) {
+    const maxScore = Math.max(...others.map((s) => s.score));
+    const tied = others.filter((s) => s.score === maxScore);
+    if (tied.length === 1) {
+      // Unique highest scorer — they lose
+      const loser = state.players.find((p) => p.id === tied[0].playerId);
+      return {
+        ...currentState,
+        phase: 'game-over',
+        scores,
+        winner,
+        loser,
+        endReason: 'normal',
+        tiebreakerRounds,
+      };
+    }
+    // Tied — each tied player draws a card
+    for (const tiedEntry of tied) {
+      currentState = ensureDrawPile(currentState);
+      if (currentState.drawPile.length === 0) break; // No cards left, break tie arbitrarily
+      const [drawnCard, ...rest] = currentState.drawPile;
+      currentState = { ...currentState, drawPile: rest };
+      const addedPoints = drawnCard.rank === '7' && drawnCard.suit === 'hearts' ? 500 : (() => {
+        // reuse scoring logic inline
+        const pts = { A: 1, '2': 20, '3': 3, '4': 20, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, J: 45, Q: 2, K: 4 };
+        return pts[drawnCard.rank] ?? 0;
+      })();
+      // Update this player's score
+      const scoreEntry = others.find((s) => s.playerId === tiedEntry.playerId);
+      scoreEntry.score += addedPoints;
+      // Also update the main scores array
+      const mainEntry = scores.find((s) => s.playerId === tiedEntry.playerId);
+      if (mainEntry) mainEntry.score += addedPoints;
+      tiebreakerRounds.push({ playerName: scoreEntry.name, card: drawnCard, addedPoints });
+    }
+    if (currentState.drawPile.length === 0) {
+      // Can't draw more — pick the tied player with highest score (first alphabetically as fallback)
+      const maxScore2 = Math.max(...others.map((s) => s.score));
+      const loserEntry = others.find((s) => s.score === maxScore2);
+      const loser = state.players.find((p) => p.id === loserEntry.playerId);
+      return { ...currentState, phase: 'game-over', scores, winner, loser, endReason: 'normal', tiebreakerRounds };
+    }
+  }
 }
 
 export function reducer(state, action) {

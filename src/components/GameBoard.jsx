@@ -9,6 +9,20 @@ function suitSymbol(suit) {
   return { hearts: '♥', diamonds: '♦', clubs: '♣', spades: '♠' }[suit] || suit;
 }
 
+function cardRotation(cardId) {
+  let h = 0;
+  for (const c of cardId) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
+  return ((h % 25) - 12); // -12 to +12 degrees
+}
+
+function cardOffset(cardId) {
+  let h = 0;
+  for (const c of cardId) h = (h * 17 + c.charCodeAt(0)) & 0xffff;
+  const x = ((h % 21) - 10); // -10 to +10 px
+  const y = (((h >> 4) % 15) - 7); // -7 to +7 px
+  return { x, y };
+}
+
 function computeNextPlayerIndex(state) {
   const { players, currentPlayerIndex, direction, reverseOnce } = state;
   const n = players.length;
@@ -184,7 +198,31 @@ export default function GameBoard({ state, dispatch, onGameOver }) {
 
         <div className="pile-area">
           <div className="pile-label">Discard Pile</div>
-          {topCard && <Card card={topCard} />}
+          <div className="discard-pile-area">
+            {state.discardPile.slice(-5).map((card) => {
+              const rot = cardRotation(card.id);
+              const off = cardOffset(card.id);
+              return (
+                <Card
+                  key={card.id}
+                  card={card}
+                  style={{
+                    transform: `translate(${off.x}px, ${off.y}px) rotate(${rot}deg)`,
+                  }}
+                />
+              );
+            })}
+            {topCard && (
+              <Card
+                key={topCard.id}
+                card={topCard}
+                style={{
+                  transform: `translate(${cardOffset(topCard.id).x}px, ${cardOffset(topCard.id).y}px) rotate(${cardRotation(topCard.id)}deg)`,
+                  zIndex: 10,
+                }}
+              />
+            )}
+          </div>
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export default function SetupScreen({ onStart, currentUser, onLogout }) {
+export default function SetupScreen({ onStart, currentUser, onLogout, onBack }) {
   const [playerCount, setPlayerCount] = useState(2);
   const [names, setNames] = useState(
     Array.from({ length: 7 }, (_, i) => `Player ${i + 1}`)
@@ -31,14 +31,21 @@ export default function SetupScreen({ onStart, currentUser, onLogout }) {
       <div className="setup-card">
         <div className="setup-header">
           <h1>💣 Bomb Card Game</h1>
-          {currentUser && (
-            <div className="setup-user">
-              Logged in as <strong>{currentUser.username}</strong>
-              <button className="btn btn-ghost btn-small" onClick={onLogout}>
-                Logout
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {onBack && (
+              <button className="btn btn-ghost btn-small" onClick={onBack}>
+                Back
               </button>
-            </div>
-          )}
+            )}
+            {currentUser && (
+              <div className="setup-user">
+                Logged in as <strong>{currentUser.username}</strong>
+                <button className="btn btn-ghost btn-small" onClick={onLogout}>
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="setup-section">
