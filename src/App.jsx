@@ -217,7 +217,7 @@ function GameStateManager({ initialState, onGameOver, onStateChange }) {
     const action = getBotAction(state, state.currentPlayerIndex);
     if (!action) return;
     const isTransitional = state.phase === 'pass-and-play' || state.phase === 'drew-card';
-    const delay = isTransitional ? 0 : 800;
+    const delay = isTransitional ? 600 : 1500;
     const timer = setTimeout(() => dispatch(action), delay);
     return () => clearTimeout(timer);
   }, [state]);
