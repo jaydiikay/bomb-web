@@ -335,19 +335,13 @@ export function reducer(state, action) {
         return handleNormalWin(newState, currentPlayerIndex);
       }
 
-      // If the second card is also 8/J it requires its own paired card (chaining)
+      // If the second card is also 8/J, chain — player must play another card.
+      // Always enter awaiting-second (mirrors the initial 8/J play): if they
+      // have no valid follow-up they click "Draw 1 Card Instead" themselves.
       if (requiresSecondCard(secondCard)) {
-        const validSeconds = getValidSecondCards(secondCard, newHand);
-        if (validSeconds.length === 0) {
-          // Hand empty after chaining — player wins
-          if (newHand.length === 0) {
-            return handleNormalWin(newState, currentPlayerIndex);
-          }
-          // No valid card to chain — draw 1 from the pile and end turn
-          let s = drawCards(newState, currentPlayerIndex, 1);
-          return advanceTurn(s);
+        if (newHand.length === 0) {
+          return handleNormalWin(newState, currentPlayerIndex);
         }
-        // Enter awaiting-second again for the chained 8/J
         return {
           ...newState,
           phase: 'awaiting-second',
