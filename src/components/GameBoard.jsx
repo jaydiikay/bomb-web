@@ -57,6 +57,15 @@ export default function GameBoard({ state, dispatch, onGameOver }) {
     dispatch({ type: 'CANCEL_SECOND' });
   }
 
+  // Draw pile is always clickable. During awaiting-second it acts as "draw instead".
+  function handleDrawPileClick() {
+    if (phase === 'awaiting-second') {
+      dispatch({ type: 'CANCEL_SECOND' });
+    } else {
+      dispatch({ type: 'DRAW_CARD' });
+    }
+  }
+
   function handleReveal() {
     dispatch({ type: 'REVEAL_HAND' });
   }
@@ -137,7 +146,7 @@ export default function GameBoard({ state, dispatch, onGameOver }) {
         <div className="pile-area">
           <div className="pile-label">Draw Pile</div>
           <div className="draw-pile-stack">
-            <Card faceDown onClick={hasPlayableCard && phase === 'playing' ? undefined : handleDraw} />
+            <Card faceDown onClick={handleDrawPileClick} />
             <div className="pile-count">{drawPile.length}</div>
           </div>
         </div>
@@ -161,11 +170,12 @@ export default function GameBoard({ state, dispatch, onGameOver }) {
         </div>
       )}
 
-      {/* Cancel second card button */}
+      {/* Draw-instead button when awaiting a second card */}
       {phase === 'awaiting-second' && (
         <div className="cancel-bar">
+          <span className="cancel-hint">No match? </span>
           <button className="btn btn-secondary" onClick={handleCancelSecond}>
-            {isChained ? 'Draw 1 Card Instead' : 'Cancel — Draw Instead'}
+            Draw 1 Card Instead
           </button>
         </div>
       )}

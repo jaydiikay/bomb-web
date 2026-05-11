@@ -238,25 +238,13 @@ export function reducer(state, action) {
       }
 
       if (requiresSecondCard(card)) {
-        // Check if player has valid second cards
-        const validSeconds = getValidSecondCards(card, newHand);
-        if (validSeconds.length === 0) {
-          // No valid second card — must draw instead (undo the play)
-          // Actually per rules: cannot play the 8/J if no valid second card
-          // Revert: put card back
-          const revertPlayers = players.map((p, i) =>
-            i === currentPlayerIndex ? { ...p } : p
-          );
-          return {
-            ...state,
-            message: `No valid second card for ${card.rank}! You must draw instead.`,
-            phase: 'playing',
-          };
-        }
+        // 8/J is always played. Then the player must pick a second card (same suit
+        // or rank). If they have none they click "Draw 1 Card Instead".
         return {
           ...newState,
           phase: 'awaiting-second',
           selectedCard: card,
+          isChained: false,
           pendingDraw: 0,
         };
       }
@@ -327,38 +315,19 @@ export function reducer(state, action) {
       const drawCount = pendingDraw > 0 ? pendingDraw : 1;
 
       let newState = drawCards(state, currentPlayerIndex, drawCount);
-      newState = { ...newState, pendingDraw: 0 };
+      newState = { ...newState, pendingDraw: 0, selectedCard: null, isChained: false };
       return advanceTurn(newState);
     }
 
     case 'CANCEL_SECOND': {
-      const { currentPlayerIndex, players, selectedCard, isChained } = state;
+      // The 8/J (or chained 8/J) was already played and is the current top card.
+      // Player has no valid second card (or chose not to play one).
+      // Draw 1 card from the pile and end the turn.
+      const { currentPlayerIndex, selectedCard } = state;
       if (!selectedCard) return state;
 
-      if (isChained) {
-        // The chained 8/J was already played — draw 1 card and end turn
-        let s = drawCards(state, currentPlayerIndex, 1);
-        return advanceTurn({ ...s, selectedCard: null, isChained: false });
-      }
-
-      // Initial 8/J cancel: put the card back in hand and restore previous top
-      const newPlayers = players.map((p, i) =>
-        i === currentPlayerIndex
-          ? { ...p, hand: [...p.hand, selectedCard] }
-          : p
-      );
-      const newDiscard = [...state.discardPile];
-      const restoredTop = newDiscard.pop();
-      return {
-        ...state,
-        players: newPlayers,
-        topCard: restoredTop || state.topCard,
-        discardPile: newDiscard,
-        selectedCard: null,
-        isChained: false,
-        phase: 'playing',
-        message: null,
-      };
+      let s = drawCards(state, currentPlayerIndex, 1);
+      return advanceTurn({ ...s, selectedCard: null, isChained: false });
     }
 
     case 'NEXT_TURN': {

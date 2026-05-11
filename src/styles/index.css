@@ -406,8 +406,14 @@ body {
 
 .cancel-bar {
   display: flex;
+  align-items: center;
   justify-content: center;
+  gap: 0.5rem;
   padding: 0.5rem;
+}
+.cancel-hint {
+  font-size: 0.88rem;
+  color: #aaa;
 }
 
 /* Bottom: current player hand */
