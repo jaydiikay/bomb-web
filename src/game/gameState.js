@@ -102,7 +102,7 @@ function advanceTurn(state) {
     ...state,
     currentPlayerIndex: next,
     reverseOnce: false,
-    phase: 'pass-and-play',
+    phase: state.isOnline ? 'playing' : 'pass-and-play',
     message: null,
   };
 }

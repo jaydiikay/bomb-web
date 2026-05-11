@@ -94,8 +94,8 @@ export default function LobbyScreen({ currentUser, onGameStart, onBack }) {
       name: p.name,
     }));
     const initialState = createInitialState(gamePlayers);
-    // For online play, skip pass-and-play: set phase to 'playing' directly
-    const onlineState = { ...initialState, phase: 'playing' };
+    // For online play: skip pass-and-play screen and bypass it on every advanceTurn
+    const onlineState = { ...initialState, phase: 'playing', isOnline: true };
     try {
       await startGame(roomCode, onlineState);
       // The subscription will pick up the state change and call onGameStart

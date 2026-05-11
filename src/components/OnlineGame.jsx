@@ -5,6 +5,22 @@ import GameBoard from './GameBoard.jsx';
 import ScoreScreen from './ScoreScreen.jsx';
 import BombAnimation from './BombAnimation.jsx';
 
+// Firebase RTDB drops empty arrays; restore them so game logic doesn't crash.
+function normalizeGameState(gs) {
+  if (!gs) return null;
+  return {
+    ...gs,
+    drawPile: gs.drawPile ?? [],
+    discardPile: gs.discardPile ?? [],
+    drawnCards: gs.drawnCards ?? [],
+    scores: gs.scores ?? [],
+    players: (gs.players ?? []).map((p) => ({
+      ...p,
+      hand: p.hand ?? [],
+    })),
+  };
+}
+
 /**
  * OnlineGame — wraps GameBoard for online play.
  *
@@ -24,7 +40,7 @@ export default function OnlineGame({ roomCode, uid, playerIndex, players, onExit
   useEffect(() => {
     const unsub = subscribeToRoom(roomCode, (roomData) => {
       if (roomData?.gameState) {
-        setGameState(roomData.gameState);
+        setGameState(normalizeGameState(roomData.gameState));
       }
     });
     return unsub;
@@ -107,8 +123,8 @@ export default function OnlineGame({ roomCode, uid, playerIndex, players, onExit
         }}
       />
 
-      {/* Waiting overlay — shown when it's another player's turn */}
-      {!isMyTurn && phase === 'playing' && (
+      {/* Waiting overlay — shown when it's not my turn (including drew-card phase) */}
+      {!isMyTurn && (phase === 'playing' || phase === 'drew-card' || phase === 'awaiting-second') && (
         <div className="waiting-overlay">
           <div className="waiting-card">
             Waiting for {currentPlayerName}...
