@@ -29,6 +29,7 @@ export function createInitialState(players) {
     id: p.id || i,
     name: p.name,
     hand: hands[i],
+    isBot: p.isBot || false,
   }));
 
   return {
